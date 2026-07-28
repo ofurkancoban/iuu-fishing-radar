@@ -27,6 +27,19 @@ from iuu_radar.ingest.wdpa import RAW_DIR as WDPA_RAW_DIR
 
 DUCKDB_PATH = REPO_ROOT / "data" / "processed" / "iuu_radar.duckdb"
 
+# Matches dbt's profiles.yml memory_limit. Without an explicit cap DuckDB
+# tries to use most of the host's RAM, which has OOM-killed pipeline
+# processes on this shared VPS once a busy region's data volume grew large.
+DUCKDB_MEMORY_LIMIT = "3GB"
+
+
+def connect_bounded(path: str, read_only: bool = False) -> duckdb.DuckDBPyConnection:
+    """Open a DuckDB connection with a memory cap so it spills to disk instead
+    of growing unbounded and risking an OOM kill on a shared host."""
+    conn = duckdb.connect(path, read_only=read_only)
+    conn.execute(f"SET memory_limit = '{DUCKDB_MEMORY_LIMIT}'")
+    return conn
+
 
 def load_events(conn: duckdb.DuckDBPyConnection, region: str) -> None:
     """Load cached events_<type>.json files for a region into raw_events."""
@@ -106,7 +119,7 @@ def load_mpas(conn: duckdb.DuckDBPyConnection, region: str) -> None:
 def load_all(region: str, duckdb_path: Path = DUCKDB_PATH) -> None:
     """Load every cached raw source for a region into the DuckDB raw schema."""
     duckdb_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = duckdb.connect(str(duckdb_path))
+    conn = connect_bounded(str(duckdb_path))
     try:
         load_events(conn, region)
         load_fishing_effort(conn, region)

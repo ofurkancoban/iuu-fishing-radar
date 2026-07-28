@@ -50,7 +50,7 @@ def transform_region(region_name: str) -> None:
 @task
 def score_region(region_name: str) -> None:
     """Build features, run rules + anomaly detection, and write result tables for one region."""
-    conn = duckdb.connect(str(duckdb_raw.DUCKDB_PATH))
+    conn = duckdb_raw.connect_bounded(str(duckdb_raw.DUCKDB_PATH))
     try:
         vessel_features = build_vessel_features(conn, region_name)
         cell_features = build_cell_features(conn, region_name, resolution=6)
@@ -132,7 +132,7 @@ def _build_anomalies(
 @task
 def export_tiles(region_name: str) -> None:
     """Export hotspot and MPA pmtiles for one region."""
-    conn = duckdb.connect(str(duckdb_raw.DUCKDB_PATH), read_only=True)
+    conn = duckdb_raw.connect_bounded(str(duckdb_raw.DUCKDB_PATH), read_only=True)
     try:
         hotspots = conn.execute(
             "SELECT * FROM result_hotspots WHERE region = ?", [region_name]
@@ -161,7 +161,7 @@ async def notify_new_anomalies(region_name: str, settings: Settings) -> None:
     """Publish newly written anomalies to the event bus for the live feed."""
     from iuu_radar.events.bus import get_event_bus
 
-    conn = duckdb.connect(str(duckdb_raw.DUCKDB_PATH), read_only=True)
+    conn = duckdb_raw.connect_bounded(str(duckdb_raw.DUCKDB_PATH), read_only=True)
     try:
         rows = conn.execute(
             "SELECT vessel_id, lon, lat, ts, reasons FROM result_anomalies "
@@ -204,7 +204,7 @@ async def run_pipeline(region_name: str | None = None) -> None:
             transform_region(name)
             score_region(name)
 
-            conn = duckdb.connect(str(duckdb_raw.DUCKDB_PATH), read_only=True)
+            conn = duckdb_raw.connect_bounded(str(duckdb_raw.DUCKDB_PATH), read_only=True)
             try:
                 rows_processed = conn.execute(
                     "SELECT count(*) FROM result_vessels WHERE region = ?", [name]
@@ -221,7 +221,7 @@ async def run_pipeline(region_name: str | None = None) -> None:
             failed = True
             raise
         finally:
-            conn = duckdb.connect(str(duckdb_raw.DUCKDB_PATH))
+            conn = duckdb_raw.connect_bounded(str(duckdb_raw.DUCKDB_PATH))
             try:
                 export_results.write_pipeline_run(
                     conn,

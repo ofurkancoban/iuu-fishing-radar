@@ -7,3 +7,9 @@ iuu_radar:
       extensions:
         - spatial
       threads: 4
+      settings:
+        # Without an explicit cap DuckDB tries to use most of the host's RAM,
+        # which OOM-killed dbt on the shared VPS once a busy region's event
+        # volume grew large. DuckDB spills to disk past this limit instead of
+        # growing unbounded, at the cost of being slower for large joins.
+        memory_limit: "3GB"
