@@ -27,6 +27,11 @@
 	}
 
 	handle /tiles/* {
+		# PMTiles range requests are cross-origin fetches from the browser
+		# (GitHub Pages or a local dev server), so they need the same CORS
+		# origin restriction as the API. No wildcard in production.
+		header Access-Control-Allow-Origin "{$CORS_ORIGIN}"
+		header Access-Control-Allow-Methods "GET"
 		root * /srv
 		file_server {
 			browse false

@@ -51,6 +51,7 @@ services:
       - caddy_config:/config
     environment:
       API_DOMAIN: ${API_DOMAIN}
+      CORS_ORIGIN: ${CORS_ORIGIN}
     # Host-side ports are configurable so this stack can coexist with another
     # reverse proxy already bound to 80/443 on a shared VPS; Caddy still
     # listens on the standard 80/443 inside the container. Point these back
