@@ -8,10 +8,17 @@ DuckDB file. dbt staging models (Phase 2) clean and type these into stg_* views.
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 from pathlib import Path
 
 import duckdb
+
+# GDAL's GeoJSON driver rejects any single feature over 200MB by default. A
+# handful of real-world MPA polygons (huge multi-part EEZ-scale designations)
+# exceed that once the WDPA export covers the whole planet, so the limit is
+# lifted here rather than silently failing to load global-scale regions.
+os.environ.setdefault("OGR_GEOJSON_MAX_OBJ_SIZE", "0")
 
 from iuu_radar.config import REPO_ROOT
 from iuu_radar.ingest.gfw import EVENT_DATASET_BY_TYPE
