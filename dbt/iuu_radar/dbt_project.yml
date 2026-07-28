@@ -1,0 +1,17 @@
+name: "iuu_radar"
+version: "1.0.0"
+config-version: 2
+
+profile: "iuu_radar"
+
+model-paths: ["models"]
+target-path: "target"
+log-path: "logs"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  iuu_radar:
+    staging:
+      +materialized: view
+    marts:
+      +materialized: table

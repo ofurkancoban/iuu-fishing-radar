@@ -1,0 +1,29 @@
+# Region and MPA definitions. Add one entry per region; the pipeline iterates
+# over all regions unless a single region is requested via CLI/env.
+#
+# bbox is [min_lon, min_lat, max_lon, max_lat] in WGS84.
+
+default:
+  name: "Galapagos Marine Reserve (demo)"
+  description: >
+    Small, well-studied region used for fast iteration during development.
+  bbox: [-92.5, -1.8, -88.5, 1.8]
+  date_range:
+    start: "2024-01-01"
+    end: "2024-03-31"
+  mpa:
+    # WDPA designation filter or explicit WDPA ids can be added here once
+    # ingest/wdpa.py is implemented.
+    wdpa_ids: []
+    edge_buffer_km: 10
+  h3:
+    resolution: 6
+  gfw:
+    datasets:
+      - "public-global-fishing-effort:v20231026"
+    event_types:
+      - "fishing"
+      - "encounter"
+      - "loitering"
+      - "port_visit"
+      - "gap"

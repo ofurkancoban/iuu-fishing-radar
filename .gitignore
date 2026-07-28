@@ -1,0 +1,30 @@
+# Data and generated artifacts (VPS-only, never committed)
+data/
+tiles/
+*.duckdb
+*.parquet
+
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.uv/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+
+# dbt
+dbt/iuu_radar/target/
+dbt/iuu_radar/logs/
+dbt/iuu_radar/dbt_packages/
+
+# Editors / OS
+.DS_Store
+.vscode/
+.idea/
+
+# Node (web tooling, if any is added later)
+node_modules/

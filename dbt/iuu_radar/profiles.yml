@@ -1,0 +1,9 @@
+iuu_radar:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "../../data/processed/iuu_radar.duckdb"
+      extensions:
+        - spatial
+      threads: 4
