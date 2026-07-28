@@ -166,7 +166,10 @@ function connectLiveFeed() {
 }
 
 map.on("load", () => {
-  map.addSource("mpa", { type: "vector", url: `pmtiles://${API_BASE_URL}/tiles/mpa.pmtiles` });
+  map.addSource("mpa", {
+    type: "vector",
+    url: `pmtiles://${API_BASE_URL}/tiles/${DEFAULT_REGION}_mpa.pmtiles`,
+  });
   map.addLayer({
     id: "mpa-fill",
     type: "fill",
@@ -184,7 +187,7 @@ map.on("load", () => {
 
   map.addSource("hotspots", {
     type: "vector",
-    url: `pmtiles://${API_BASE_URL}/tiles/hotspots.pmtiles`,
+    url: `pmtiles://${API_BASE_URL}/tiles/${DEFAULT_REGION}_hotspots.pmtiles`,
   });
   map.addLayer({
     id: "hotspots-fill",
@@ -205,8 +208,10 @@ map.on("load", () => {
   });
 
   map.on("click", "mpa-fill", (e) => {
+    // The tiles carry raw WDPA attribute names (SITE_ID), not the API's mpa_id
+    // alias; both refer to the same value (see dbt stg_mpa.sql).
     const props = e.features[0].properties;
-    if (props.mpa_id) showMpaDetail(props.mpa_id);
+    if (props.SITE_ID) showMpaDetail(String(props.SITE_ID));
   });
   map.on("mouseenter", "mpa-fill", () => (map.getCanvas().style.cursor = "pointer"));
   map.on("mouseleave", "mpa-fill", () => (map.getCanvas().style.cursor = ""));

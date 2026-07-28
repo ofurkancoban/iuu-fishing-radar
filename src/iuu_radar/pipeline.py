@@ -65,12 +65,7 @@ def score_region(region_name: str) -> None:
         export_results.write_vessels(conn, region_name, vessels_out)
         export_results.write_hotspots(conn, region_name, cell_features)
 
-        mpa_scores = (
-            vessels_out.groupby("region")["score"]
-            .mean()
-            .reset_index()
-            .assign(mpa_id="aggregate")[["mpa_id", "region", "score"]]
-        )
+        mpa_scores = _build_mpa_scores(conn, region_name, vessels_out)
         export_results.write_mpa_scores(conn, region_name, mpa_scores)
 
         flagged = vessels_out[vessels_out["flags"].apply(len) > 0]
@@ -78,6 +73,29 @@ def score_region(region_name: str) -> None:
         export_results.write_anomalies(conn, anomalies)
     finally:
         conn.close()
+
+
+def _build_mpa_scores(
+    conn: duckdb.DuckDBPyConnection, region_name: str, vessels_out: pd.DataFrame
+) -> pd.DataFrame:
+    """Compute a real per-MPA risk score: the mean score of vessels with at least
+    one event inside or near that MPA, ranked descending within the region.
+
+    mpa_id here matches stg_mpa.mpa_id (WDPA/WD-OECM SITE_ID) so it lines up
+    with the id the API and the map's MPA click handler use.
+    """
+    scores = conn.execute(
+        """
+        SELECT e.mpa_id, e.region, avg(v.score) AS score
+        FROM mart_events_mpa e
+        JOIN vessels_out v ON e.vessel_id = v.vessel_id AND e.region = v.region
+        WHERE e.region = ? AND e.mpa_id IS NOT NULL
+          AND e.proximity_zone IN ('inside', 'edge')
+        GROUP BY e.mpa_id, e.region
+        """,
+        [region_name],
+    ).fetch_df()
+    return scores
 
 
 def _build_anomalies(
@@ -127,11 +145,15 @@ def export_tiles(region_name: str) -> None:
 
     geojson_path = REPO_ROOT / "data" / "interim" / f"{region_name}_hotspots.geojson"
     export_tiles_mod.hotspots_to_geojson(hotspots, geojson_path)
-    export_tiles_mod.build_hotspot_tiles(geojson_path)
+    export_tiles_mod.build_hotspot_tiles(
+        geojson_path, out_path=export_tiles_mod.TILES_DIR / f"{region_name}_hotspots.pmtiles"
+    )
 
     mpa_geojson = wdpa_ingest.RAW_DIR / f"{region_name}.geojson"
     if mpa_geojson.exists():
-        export_tiles_mod.build_mpa_tiles(mpa_geojson)
+        export_tiles_mod.build_mpa_tiles(
+            mpa_geojson, out_path=export_tiles_mod.TILES_DIR / f"{region_name}_mpa.pmtiles"
+        )
 
 
 @task
