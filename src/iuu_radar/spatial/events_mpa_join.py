@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import duckdb
 
-DEFAULT_BATCH_SIZE = 20_000
+DEFAULT_BATCH_SIZE = 2_000
 
 _CREATE_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS mart_events_mpa (

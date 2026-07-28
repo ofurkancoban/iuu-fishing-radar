@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import duckdb
 
-DEFAULT_BATCH_SIZE = 500
+DEFAULT_BATCH_SIZE = 50
 EDGE_BUFFER_KM = 10
 # 1 degree of latitude is ~111 km; a coarse but dependency-free km->degree
 # conversion, adequate for the small-to-regional bboxes this project targets.

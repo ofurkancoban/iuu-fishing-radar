@@ -27,10 +27,12 @@ from iuu_radar.ingest.wdpa import RAW_DIR as WDPA_RAW_DIR
 
 DUCKDB_PATH = REPO_ROOT / "data" / "processed" / "iuu_radar.duckdb"
 
-# Matches dbt's profiles.yml memory_limit. Without an explicit cap DuckDB
-# tries to use most of the host's RAM, which has OOM-killed pipeline
-# processes on this shared VPS once a busy region's data volume grew large.
-DUCKDB_MEMORY_LIMIT = "3GB"
+# Matches dbt's profiles.yml settings. Without an explicit cap DuckDB tries
+# to use most of the host's RAM, and parallel threads multiply peak memory
+# for the spatial workload; both have OOM-killed pipeline processes on this
+# shared VPS for busy regions even with memory_limit alone set.
+DUCKDB_MEMORY_LIMIT = "2GB"
+DUCKDB_THREADS = 1
 
 
 def connect_bounded(path: str, read_only: bool = False) -> duckdb.DuckDBPyConnection:
@@ -38,6 +40,7 @@ def connect_bounded(path: str, read_only: bool = False) -> duckdb.DuckDBPyConnec
     of growing unbounded and risking an OOM kill on a shared host."""
     conn = duckdb.connect(path, read_only=read_only)
     conn.execute(f"SET memory_limit = '{DUCKDB_MEMORY_LIMIT}'")
+    conn.execute(f"SET threads = {DUCKDB_THREADS}")
     conn.execute("INSTALL spatial")
     conn.execute("LOAD spatial")
     return conn

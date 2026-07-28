@@ -6,10 +6,13 @@ iuu_radar:
       path: "../../data/processed/iuu_radar.duckdb"
       extensions:
         - spatial
-      threads: 4
+      # threads=1 to avoid multiplying memory pressure across parallel
+      # workers; this shared VPS's spatial workload has repeatedly OOM-killed
+      # dbt/python even with memory_limit set, so trading speed for headroom.
+      threads: 1
       settings:
         # Without an explicit cap DuckDB tries to use most of the host's RAM,
         # which OOM-killed dbt on the shared VPS once a busy region's event
         # volume grew large. DuckDB spills to disk past this limit instead of
         # growing unbounded, at the cost of being slower for large joins.
-        memory_limit: "3GB"
+        memory_limit: "2GB"
