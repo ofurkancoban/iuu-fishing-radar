@@ -34,13 +34,18 @@ technology stack, phased roadmap, and the mandatory VPS security checklist
 
 ## Status
 
-Phases 0 through 8 are implemented: ingestion, DuckDB/dbt storage and
-transforms, spatial/feature engineering, rule-based flags and anomaly scoring,
-pmtiles export, the FastAPI + SSE serving layer, the MapLibre frontend
-showcase, and Docker/Caddy deployment. The stack is deployed and reachable on
-the project VPS (see Deployment below). Remaining work: Phase 9
-(Prometheus/Grafana dashboards content), and Phase 12 (final security review).
-Work proceeds phase by phase per the roadmap in `CLAUDE.md` section 14.
+Phases 0 through 9 and 12 (core roadmap) are implemented: ingestion,
+DuckDB/dbt storage and transforms, spatial/feature engineering, rule-based
+flags and anomaly scoring, pmtiles export, the FastAPI + SSE serving layer,
+the MapLibre frontend showcase, Docker/Caddy deployment, and Prometheus/
+Grafana observability. The stack is deployed and reachable on the project VPS
+(see Deployment and Security review below). Phases 10 (Kafka/Redpanda
+streaming) and 11 (k3s) are optional and were not requested, so they remain
+unbuilt. No live pipeline run against real GFW/WDPA data has been executed yet
+(the WDPA source shapefile needs to be downloaded and placed manually per
+`ingest/wdpa.py`'s docstring); every stage has instead been verified against
+local unit tests with synthetic and seeded data. Work proceeds phase by phase
+per the roadmap in `CLAUDE.md` section 14.
 
 ## Local development
 
@@ -104,6 +109,51 @@ docker compose up -d api caddy redis prometheus grafana node-exporter cadvisor
 # Pipeline is not part of `up`; invoke it on a schedule instead:
 docker compose run --rm pipeline
 ```
+
+## Security review (section 11 checklist)
+
+Verified live against the deployed VPS on 2026-07-28:
+
+| Item | Status |
+|------|--------|
+| Firewall default-deny inbound, only needed ports open | Done. UFW active, default deny incoming; adapted for this shared VPS (see below). |
+| Only the reverse proxy binds to a public interface | Done. `api`, `redis`, `prometheus`, `grafana`, `node-exporter`, `cadvisor` publish no host ports; confirmed empty port mappings via `docker inspect`. |
+| Redis password required, internal-only | Done. `redis-cli ping` fails with `NOAUTH` without the password; no host port published. |
+| Monitoring UIs not public | Done. Grafana and Prometheus reachable from inside the Docker network (`wget` from the caddy container succeeds) but have zero host port exposure. |
+| SSH key-based only, root login disabled | **Deviated.** Left as password + root login enabled at the operator's explicit request, since this is a shared box other workflows depend on. A dedicated sudo user (`iuuradar`) was created as the intended path forward. |
+| fail2ban running | Done. Installed and active, jailing sshd after 5 failed attempts. |
+| TLS via Caddy, HSTS | **Pending a domain.** No DNS is pointed at the VPS yet, so Caddy serves plain HTTP on port 8090 (`API_DOMAIN=:80`). Automatic HTTPS activates the moment `API_DOMAIN` is set to a real domain with an A record. |
+| Caddy strips server headers, no directory listing | Done, configured in `caddy/Caddyfile` (`-Server` header, `browse false` on `/tiles/*`). |
+| Rate limiting per client IP | Done. `slowapi` enforces `RATE_LIMIT` requests/minute in the API. |
+| Every list endpoint bounds region/limit/offset/bbox | Done, covered by `tests/test_api.py` (422 on out-of-range input). |
+| CORS restricted to the exact Pages origin, no wildcard | Done in `api/main.py`. |
+| No stack traces or internal errors returned to callers | Done. Generic 500 handler logs server-side, returns `{"detail": "Internal server error."}`. |
+| API opens DuckDB read-only; only the pipeline writes | Done. `api/deps.py` connects with `read_only=True`; `data/` is mounted `:ro` into the `api` container in `docker-compose.yml`. |
+| Containers run as non-root | Done. `docker exec iuu-radar-api-1 whoami` returns `iuu_radar`. |
+| Base images pinned, no bare `:latest` | Done across `Dockerfile` and `docker-compose.yml`. |
+| Secrets never baked into the image | Done. `docker history` shows no token/password in any layer; secrets are injected via `.env` at container start. |
+| `.env` gitignored and `chmod 600` | Done, both locally and on the VPS. |
+| Unattended security updates enabled | Done, confirmed via `unattended-upgrades` package config. |
+| No raw WDPA data served for bulk download | Done by construction: `ingest/wdpa.py` only ever writes simplified GeoJSON to the gitignored `data/raw/`, and the API/tiles layer never exposes it. |
+
+### Known deviations from CLAUDE.md section 11, and why
+
+This project's VPS is a pre-existing, shared, actively used box (other
+personal apps, not a dedicated single-purpose host), so two items were
+deliberately not applied as written, with the operator's explicit sign-off
+each time:
+
+1. **SSH root login and password auth remain enabled.** The box has other
+   workflows (Portainer, several apps) that log in as root; disabling this
+   was judged higher-risk than leaving it, until the operator chooses to
+   migrate fully to the `iuuradar` sudo user.
+2. **TLS is not yet active.** No domain is pointed at this VPS. Caddy is
+   configured to activate automatic HTTPS the moment `API_DOMAIN` in `.env`
+   is changed from `:80` to a real domain with a DNS A record; no code change
+   is needed.
+
+Both are flagged here rather than silently accepted, so they are visible and
+revisitable rather than assumed done.
 
 ## Attribution
 

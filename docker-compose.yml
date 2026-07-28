@@ -62,7 +62,9 @@ services:
       - api
     networks: [internal]
     healthcheck:
-      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:80"]
+      # "/" itself intentionally 404s (no directory listing, no unmapped
+      # routes exposed); /api/health is the real liveness probe.
+      test: ["CMD", "wget", "-q", "-O-", "http://127.0.0.1:80/api/health"]
       interval: 30s
       timeout: 5s
       retries: 3
