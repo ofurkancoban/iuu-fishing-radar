@@ -21,6 +21,8 @@ dependencies = [
     "pydantic-settings",
     "pyyaml",
     "prometheus-fastapi-instrumentator",
+    "sse-starlette>=3.4.6",
+    "slowapi>=0.1.10",
 ]
 
 [project.optional-dependencies]
@@ -36,6 +38,8 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+# B008: FastAPI's Depends()-in-default-argument is the intended idiom, not a bug.
+ignore = ["B008"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -43,6 +47,11 @@ testpaths = ["tests"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/iuu_radar"]
