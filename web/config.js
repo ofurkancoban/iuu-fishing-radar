@@ -1,6 +1,6 @@
 // Single point of difference between local and production frontends.
-// No data is ever stored here, only the API location.
+// No data is ever stored here, only the API location. Regions are discovered
+// at runtime from /api/regions, so no region needs to be configured here.
 window.IUU_RADAR_CONFIG = {
-  API_BASE_URL: "http://158.220.124.164:8090",
-  DEFAULT_REGION: "default",
+  API_BASE_URL: "http://localhost:8000",
 };

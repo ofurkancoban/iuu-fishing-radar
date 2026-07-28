@@ -1,8 +1,11 @@
 // IUU Fishing Radar frontend: MapLibre GL JS + PMTiles protocol + live SSE feed.
 // Reads window.IUU_RADAR_CONFIG.API_BASE_URL for all data. No data is stored
 // in this file or fetched from anywhere but the configured VPS API.
+//
+// Regions are discovered from /api/regions rather than hardcoded, so every
+// configured region's MPAs, hotspots, and anomalies show up on one world map.
 
-const { API_BASE_URL, DEFAULT_REGION } = window.IUU_RADAR_CONFIG;
+const { API_BASE_URL } = window.IUU_RADAR_CONFIG;
 
 const protocol = new pmtiles.Protocol();
 maplibregl.addProtocol("pmtiles", protocol.tile);
@@ -10,8 +13,8 @@ maplibregl.addProtocol("pmtiles", protocol.tile);
 const map = new maplibregl.Map({
   container: "map",
   style: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json",
-  center: [-90.5, -0.7],
-  zoom: 6,
+  center: [20, 20],
+  zoom: 1.5,
   attributionControl: true,
 });
 
@@ -80,17 +83,23 @@ async function showVesselDetail(vesselId) {
   }
 }
 
-async function loadRankedMpas() {
+async function loadRankedMpas(regions) {
   const list = document.getElementById("mpa-list");
   try {
-    const mpas = await fetchJSON("/api/mpas", { region: DEFAULT_REGION });
+    const perRegion = await Promise.all(
+      regions.map((r) =>
+        fetchJSON("/api/mpas", { region: r.region }).catch(() => [])
+      )
+    );
+    const mpas = perRegion.flat().sort((a, b) => b.score - a.score);
+
     list.innerHTML = "";
     for (const mpa of mpas) {
       const li = document.createElement("li");
       li.className = "list-item";
       li.innerHTML = `
         <div class="row">
-          <span>#${mpa.rank} · MPA ${mpa.mpa_id}</span>
+          <span>#${mpa.rank} · MPA ${mpa.mpa_id} <span class="sub">(${mpa.region})</span></span>
           <span class="score">${mpa.score.toFixed(0)}</span>
         </div>
       `;
@@ -110,7 +119,7 @@ function prependAnomalyToFeed(anomaly) {
   const reason = (anomaly.reasons && anomaly.reasons[0]) || "Flagged as anomalous.";
   li.innerHTML = `
     <div class="row">
-      <span>Vessel ${anomaly.vessel_id}</span>
+      <span>Vessel ${anomaly.vessel_id} <span class="sub">(${anomaly.region})</span></span>
     </div>
     <div class="sub">${reason}</div>
   `;
@@ -133,13 +142,15 @@ function dropAnomalyMarker(anomaly) {
     .addTo(map);
 }
 
-async function loadInitialAnomalies() {
+async function loadInitialAnomalies(regions) {
   try {
-    const anomalies = await fetchJSON("/api/anomalies/latest", {
-      region: DEFAULT_REGION,
-      limit: 25,
-    });
-    for (const anomaly of anomalies.reverse()) {
+    const perRegion = await Promise.all(
+      regions.map((r) =>
+        fetchJSON("/api/anomalies/latest", { region: r.region, limit: 25 }).catch(() => [])
+      )
+    );
+    const anomalies = perRegion.flat().sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
+    for (const anomaly of anomalies) {
       prependAnomalyToFeed(anomaly);
       dropAnomalyMarker(anomaly);
     }
@@ -148,51 +159,61 @@ async function loadInitialAnomalies() {
   }
 }
 
-function connectLiveFeed() {
+function connectLiveFeed(regions) {
   setStatus("connecting", "connecting…");
-  const source = new EventSource(
-    `${API_BASE_URL}/api/stream?region=${encodeURIComponent(DEFAULT_REGION)}`
-  );
+  let liveCount = 0;
 
-  source.addEventListener("anomaly", (event) => {
-    setStatus("live", "live");
-    const anomaly = JSON.parse(event.data);
-    prependAnomalyToFeed(anomaly);
-    dropAnomalyMarker(anomaly);
-  });
+  for (const r of regions) {
+    const source = new EventSource(
+      `${API_BASE_URL}/api/stream?region=${encodeURIComponent(r.region)}`
+    );
 
-  source.addEventListener("keep-alive", () => setStatus("live", "live"));
-  source.onerror = () => setStatus("connecting", "reconnecting…");
+    source.addEventListener("anomaly", (event) => {
+      liveCount += 1;
+      setStatus("live", "live");
+      const anomaly = JSON.parse(event.data);
+      prependAnomalyToFeed(anomaly);
+      dropAnomalyMarker(anomaly);
+    });
+
+    source.addEventListener("keep-alive", () => setStatus("live", "live"));
+    source.onerror = () => {
+      if (liveCount === 0) setStatus("connecting", "reconnecting…");
+    };
+  }
 }
 
-map.on("load", () => {
-  map.addSource("mpa", {
+function addRegionLayers(region) {
+  const mpaSourceId = `mpa-${region}`;
+  const hotspotsSourceId = `hotspots-${region}`;
+
+  map.addSource(mpaSourceId, {
     type: "vector",
-    url: `pmtiles://${API_BASE_URL}/tiles/${DEFAULT_REGION}_mpa.pmtiles`,
+    url: `pmtiles://${API_BASE_URL}/tiles/${region}_mpa.pmtiles`,
   });
   map.addLayer({
-    id: "mpa-fill",
+    id: `mpa-fill-${region}`,
     type: "fill",
-    source: "mpa",
+    source: mpaSourceId,
     "source-layer": "mpa",
     paint: { "fill-color": "#38d3c0", "fill-opacity": 0.08 },
   });
   map.addLayer({
-    id: "mpa-outline",
+    id: `mpa-outline-${region}`,
     type: "line",
-    source: "mpa",
+    source: mpaSourceId,
     "source-layer": "mpa",
     paint: { "line-color": "#38d3c0", "line-width": 1.5 },
   });
 
-  map.addSource("hotspots", {
+  map.addSource(hotspotsSourceId, {
     type: "vector",
-    url: `pmtiles://${API_BASE_URL}/tiles/${DEFAULT_REGION}_hotspots.pmtiles`,
+    url: `pmtiles://${API_BASE_URL}/tiles/${region}_hotspots.pmtiles`,
   });
   map.addLayer({
-    id: "hotspots-fill",
+    id: `hotspots-fill-${region}`,
     type: "fill",
-    source: "hotspots",
+    source: hotspotsSourceId,
     "source-layer": "hotspots",
     paint: {
       "fill-color": [
@@ -207,16 +228,54 @@ map.on("load", () => {
     },
   });
 
-  map.on("click", "mpa-fill", (e) => {
+  map.on("click", `mpa-fill-${region}`, (e) => {
     // The tiles carry raw WDPA attribute names (SITE_ID), not the API's mpa_id
     // alias; both refer to the same value (see dbt stg_mpa.sql).
     const props = e.features[0].properties;
     if (props.SITE_ID) showMpaDetail(String(props.SITE_ID));
   });
-  map.on("mouseenter", "mpa-fill", () => (map.getCanvas().style.cursor = "pointer"));
-  map.on("mouseleave", "mpa-fill", () => (map.getCanvas().style.cursor = ""));
+  map.on("mouseenter", `mpa-fill-${region}`, () => (map.getCanvas().style.cursor = "pointer"));
+  map.on("mouseleave", `mpa-fill-${region}`, () => (map.getCanvas().style.cursor = ""));
+}
 
-  loadRankedMpas();
-  loadInitialAnomalies();
-  connectLiveFeed();
+function fitToRegions(regions) {
+  if (regions.length === 0) return;
+  let [minLon, minLat, maxLon, maxLat] = regions[0].bbox;
+  for (const r of regions.slice(1)) {
+    const [lo1, la1, lo2, la2] = r.bbox;
+    minLon = Math.min(minLon, lo1);
+    minLat = Math.min(minLat, la1);
+    maxLon = Math.max(maxLon, lo2);
+    maxLat = Math.max(maxLat, la2);
+  }
+  map.fitBounds(
+    [
+      [minLon, minLat],
+      [maxLon, maxLat],
+    ],
+    { padding: 40, duration: 0 }
+  );
+}
+
+map.on("error", (e) => {
+  // A missing pmtiles file for one region (e.g. its pipeline hasn't run yet)
+  // should not break the rest of the map.
+  console.warn("Map source error (non-fatal):", e.error?.message || e);
+});
+
+map.on("load", async () => {
+  let regions;
+  try {
+    regions = await fetchJSON("/api/regions");
+  } catch (err) {
+    console.error("Unable to load /api/regions:", err);
+    regions = [];
+  }
+
+  for (const r of regions) addRegionLayers(r.region);
+  fitToRegions(regions);
+
+  loadRankedMpas(regions);
+  loadInitialAnomalies(regions);
+  connectLiveFeed(regions);
 });

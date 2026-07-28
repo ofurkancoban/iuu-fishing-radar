@@ -15,7 +15,7 @@ from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
 from iuu_radar.api.deps import DUCKDB_PATH, get_settings
-from iuu_radar.api.routers import anomalies, hotspots, mpas, vessels
+from iuu_radar.api.routers import anomalies, hotspots, mpas, regions, vessels
 from iuu_radar.api.stream import router as stream_router
 from iuu_radar.metrics import refresh_pipeline_gauges
 
@@ -60,6 +60,7 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+app.include_router(regions.router)
 app.include_router(mpas.router)
 app.include_router(hotspots.router)
 app.include_router(vessels.router)

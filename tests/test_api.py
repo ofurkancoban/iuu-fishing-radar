@@ -54,6 +54,15 @@ def test_health_ok(client):
     assert response.json() == {"status": "ok"}
 
 
+def test_list_regions(client):
+    response = client.get("/api/regions")
+    assert response.status_code == 200
+    body = response.json()
+    keys = {r["region"] for r in body}
+    assert {"default", "turkey_seas"} <= keys
+    assert all("bbox" in r and "name" in r for r in body)
+
+
 def test_list_mpas(client):
     response = client.get("/api/mpas", params={"region": "default"})
     assert response.status_code == 200
