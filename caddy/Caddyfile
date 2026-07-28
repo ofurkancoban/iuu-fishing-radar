@@ -1,0 +1,39 @@
+{
+	# Strip the Server header; Caddy issues Let's Encrypt certs automatically
+	# for the domain below and redirects plain HTTP to HTTPS by default.
+	servers {
+		trusted_proxies static private_ranges
+	}
+}
+
+{$API_DOMAIN} {
+	encode gzip
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	# Server-Sent Events must reach the client immediately, not be buffered.
+	@stream path /api/stream
+	handle @stream {
+		reverse_proxy api:8000 {
+			flush_interval -1
+		}
+	}
+
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+
+	handle /tiles/* {
+		root * /srv
+		file_server {
+			browse false
+		}
+	}
+
+	handle {
+		respond 404
+	}
+}
