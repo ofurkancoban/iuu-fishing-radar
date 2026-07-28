@@ -3,9 +3,19 @@
 // in this file or fetched from anywhere but the configured VPS API.
 //
 // Regions are discovered from /api/regions rather than hardcoded, so every
-// configured region's MPAs, hotspots, and anomalies show up on one world map.
+// configured region's MPAs, hotspots, and anomalies show up on one world map,
+// with a region filter in the side panel to focus on just one.
 
 const { API_BASE_URL } = window.IUU_RADAR_CONFIG;
+
+const ALL_REGIONS = "__all__";
+const state = {
+  regions: [], // [{region, name, bbox}]
+  regionByKey: new Map(),
+  mpas: [], // flattened across regions, each tagged with .region
+  markers: [], // [{marker, region}]
+  selectedRegion: ALL_REGIONS,
+};
 
 const protocol = new pmtiles.Protocol();
 maplibregl.addProtocol("pmtiles", protocol.tile);
@@ -20,9 +30,9 @@ const map = new maplibregl.Map({
 
 map.addControl(new maplibregl.NavigationControl(), "top-left");
 
-function setStatus(state, label) {
+function setStatus(statusState, label) {
   const el = document.getElementById("connection-status");
-  el.className = `status status--${state}`;
+  el.className = `status status--${statusState}`;
   el.textContent = label;
 }
 
@@ -83,31 +93,39 @@ async function showVesselDetail(vesselId) {
   }
 }
 
-async function loadRankedMpas(regions) {
+function renderMpaList() {
   const list = document.getElementById("mpa-list");
+  const mpas = state.mpas
+    .filter((m) => state.selectedRegion === ALL_REGIONS || m.region === state.selectedRegion)
+    .sort((a, b) => b.score - a.score);
+
+  list.innerHTML = "";
+  if (mpas.length === 0) {
+    list.innerHTML = '<li class="list-item">No MPAs scored for this region yet.</li>';
+    return;
+  }
+  for (const mpa of mpas) {
+    const li = document.createElement("li");
+    li.className = "list-item";
+    li.innerHTML = `
+      <div class="row">
+        <span>#${mpa.rank} · MPA ${mpa.mpa_id} <span class="sub">(${mpa.region})</span></span>
+        <span class="score">${mpa.score.toFixed(0)}</span>
+      </div>
+    `;
+    li.addEventListener("click", () => showMpaDetail(mpa.mpa_id));
+    list.appendChild(li);
+  }
+}
+
+async function loadRankedMpas(regions) {
   try {
     const perRegion = await Promise.all(
-      regions.map((r) =>
-        fetchJSON("/api/mpas", { region: r.region }).catch(() => [])
-      )
+      regions.map((r) => fetchJSON("/api/mpas", { region: r.region }).catch(() => []))
     );
-    const mpas = perRegion.flat().sort((a, b) => b.score - a.score);
-
-    list.innerHTML = "";
-    for (const mpa of mpas) {
-      const li = document.createElement("li");
-      li.className = "list-item";
-      li.innerHTML = `
-        <div class="row">
-          <span>#${mpa.rank} · MPA ${mpa.mpa_id} <span class="sub">(${mpa.region})</span></span>
-          <span class="score">${mpa.score.toFixed(0)}</span>
-        </div>
-      `;
-      li.addEventListener("click", () => showMpaDetail(mpa.mpa_id));
-      list.appendChild(li);
-    }
+    state.mpas = perRegion.flat();
+    renderMpaList();
   } catch (err) {
-    list.innerHTML = '<li class="list-item">Unable to reach the API.</li>';
     console.error(err);
   }
 }
@@ -116,6 +134,10 @@ function prependAnomalyToFeed(anomaly) {
   const list = document.getElementById("anomaly-list");
   const li = document.createElement("li");
   li.className = "list-item item-enter";
+  li.dataset.region = anomaly.region;
+  if (state.selectedRegion !== ALL_REGIONS && anomaly.region !== state.selectedRegion) {
+    li.style.display = "none";
+  }
   const reason = (anomaly.reasons && anomaly.reasons[0]) || "Flagged as anomalous.";
   li.innerHTML = `
     <div class="row">
@@ -125,14 +147,17 @@ function prependAnomalyToFeed(anomaly) {
   `;
   li.addEventListener("click", () => showVesselDetail(anomaly.vessel_id));
   list.prepend(li);
-  while (list.children.length > 25) list.removeChild(list.lastChild);
+  while (list.children.length > 60) list.removeChild(list.lastChild);
 }
 
 function dropAnomalyMarker(anomaly) {
   if (typeof anomaly.lon !== "number" || typeof anomaly.lat !== "number") return;
   const el = document.createElement("div");
   el.className = "anomaly-marker";
-  new maplibregl.Marker({ element: el })
+  if (state.selectedRegion !== ALL_REGIONS && anomaly.region !== state.selectedRegion) {
+    el.style.display = "none";
+  }
+  const marker = new maplibregl.Marker({ element: el })
     .setLngLat([anomaly.lon, anomaly.lat])
     .setPopup(
       new maplibregl.Popup({ offset: 12 }).setHTML(
@@ -140,6 +165,7 @@ function dropAnomalyMarker(anomaly) {
       )
     )
     .addTo(map);
+  state.markers.push({ marker, region: anomaly.region });
 }
 
 async function loadInitialAnomalies(regions) {
@@ -238,8 +264,11 @@ function addRegionLayers(region) {
   map.on("mouseleave", `mpa-fill-${region}`, () => (map.getCanvas().style.cursor = ""));
 }
 
-function fitToRegions(regions) {
-  if (regions.length === 0) return;
+function regionLayerIds(region) {
+  return [`mpa-fill-${region}`, `mpa-outline-${region}`, `hotspots-fill-${region}`];
+}
+
+function bboxUnion(regions) {
   let [minLon, minLat, maxLon, maxLat] = regions[0].bbox;
   for (const r of regions.slice(1)) {
     const [lo1, la1, lo2, la2] = r.bbox;
@@ -248,13 +277,60 @@ function fitToRegions(regions) {
     maxLon = Math.max(maxLon, lo2);
     maxLat = Math.max(maxLat, la2);
   }
+  return [minLon, minLat, maxLon, maxLat];
+}
+
+function fitToBbox(bbox, opts = {}) {
+  const [minLon, minLat, maxLon, maxLat] = bbox;
   map.fitBounds(
     [
       [minLon, minLat],
       [maxLon, maxLat],
     ],
-    { padding: 40, duration: 0 }
+    { padding: 40, duration: 600, ...opts }
   );
+}
+
+function applyRegionFilter(selected) {
+  state.selectedRegion = selected;
+
+  for (const r of state.regions) {
+    const visible = selected === ALL_REGIONS || r.region === selected;
+    for (const layerId of regionLayerIds(r.region)) {
+      if (map.getLayer(layerId)) {
+        map.setLayoutProperty(layerId, "visibility", visible ? "visible" : "none");
+      }
+    }
+  }
+
+  for (const { marker, region } of state.markers) {
+    marker.getElement().style.display =
+      selected === ALL_REGIONS || region === selected ? "" : "none";
+  }
+
+  for (const li of document.getElementById("anomaly-list").children) {
+    li.style.display = selected === ALL_REGIONS || li.dataset.region === selected ? "" : "none";
+  }
+
+  renderMpaList();
+
+  if (selected === ALL_REGIONS) {
+    fitToBbox(bboxUnion(state.regions));
+  } else {
+    const region = state.regionByKey.get(selected);
+    if (region) fitToBbox(region.bbox);
+  }
+}
+
+function populateRegionFilter(regions) {
+  const select = document.getElementById("region-filter");
+  for (const r of regions) {
+    const option = document.createElement("option");
+    option.value = r.region;
+    option.textContent = r.name;
+    select.appendChild(option);
+  }
+  select.addEventListener("change", (e) => applyRegionFilter(e.target.value));
 }
 
 map.on("error", (e) => {
@@ -272,9 +348,13 @@ map.on("load", async () => {
     regions = [];
   }
 
-  for (const r of regions) addRegionLayers(r.region);
-  fitToRegions(regions);
+  state.regions = regions;
+  state.regionByKey = new Map(regions.map((r) => [r.region, r]));
 
+  for (const r of regions) addRegionLayers(r.region);
+  if (regions.length > 0) fitToBbox(bboxUnion(regions), { duration: 0 });
+
+  populateRegionFilter(regions);
   loadRankedMpas(regions);
   loadInitialAnomalies(regions);
   connectLiveFeed(regions);

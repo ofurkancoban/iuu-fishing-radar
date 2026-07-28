@@ -104,6 +104,23 @@ body {
   gap: 8px;
 }
 
+.region-select {
+  width: 100%;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: var(--font);
+  cursor: pointer;
+}
+
+.region-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 .live-dot {
   width: 6px;
   height: 6px;
