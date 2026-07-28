@@ -2,6 +2,13 @@
 # over all regions unless a single region is requested via CLI/env.
 #
 # bbox is [min_lon, min_lat, max_lon, max_lat] in WGS84.
+#
+# A single worldwide bbox was tried and reverted: even after paginating events
+# and splitting the 4Wings fishing-effort report by month, a single global
+# month's vessel-level effort report alone grew past what an 11GB shared VPS
+# can hold in memory (observed ~5.8GB and still climbing before being killed
+# manually). Named regional bboxes covering real high-activity fishing areas
+# give broad world coverage without that failure mode.
 
 default:
   name: "Galapagos Marine Reserve (demo)"
@@ -12,38 +19,10 @@ default:
     start: "2024-01-01"
     end: "2024-03-31"
   mpa:
-    # WDPA designation filter or explicit WDPA ids can be added here once
-    # ingest/wdpa.py is implemented.
     wdpa_ids: []
     edge_buffer_km: 10
   h3:
     resolution: 6
-  gfw:
-    datasets:
-      - "public-global-fishing-effort:v20231026"
-    event_types:
-      - "fishing"
-      - "encounter"
-      - "loitering"
-      - "port_visit"
-      - "gap"
-
-global:
-  name: "Global (all oceans)"
-  description: >
-    Worldwide coverage, all oceans. Large by design: used to demonstrate the
-    pipeline at global scale. Data volume and runtime are both significant
-    at this bbox; the spatial join relies on int_mpa_buffered's R-tree index
-    to stay tractable against the full worldwide MPA set.
-  bbox: [-180.0, -85.0, 180.0, 85.0]
-  date_range:
-    start: "2024-01-01"
-    end: "2024-03-31"
-  mpa:
-    wdpa_ids: []
-    edge_buffer_km: 10
-  h3:
-    resolution: 5
   gfw:
     datasets:
       - "public-global-fishing-effort:v20231026"
@@ -61,6 +40,126 @@ turkey_seas:
     Sea, covering MPAs such as the Datca-Bozburun and Gokova Special
     Environmental Protection Areas.
   bbox: [23.0, 35.5, 42.0, 43.0]
+  date_range:
+    start: "2024-01-01"
+    end: "2024-03-31"
+  mpa:
+    wdpa_ids: []
+    edge_buffer_km: 10
+  h3:
+    resolution: 6
+  gfw:
+    datasets:
+      - "public-global-fishing-effort:v20231026"
+    event_types:
+      - "fishing"
+      - "encounter"
+      - "loitering"
+      - "port_visit"
+      - "gap"
+
+north_sea:
+  name: "North Sea (Europe's busiest fishing ground)"
+  description: >
+    North Sea waters shared by the UK, Norway, Denmark, Germany, the
+    Netherlands, and Belgium; among the most heavily fished areas in Europe.
+  bbox: [-4.0, 51.0, 9.0, 61.5]
+  date_range:
+    start: "2024-01-01"
+    end: "2024-03-31"
+  mpa:
+    wdpa_ids: []
+    edge_buffer_km: 10
+  h3:
+    resolution: 6
+  gfw:
+    datasets:
+      - "public-global-fishing-effort:v20231026"
+    event_types:
+      - "fishing"
+      - "encounter"
+      - "loitering"
+      - "port_visit"
+      - "gap"
+
+baltic_sea:
+  name: "Baltic Sea"
+  description: >
+    Baltic Sea waters shared by Sweden, Finland, the Baltic states, Poland,
+    Germany, and Denmark.
+  bbox: [9.0, 53.0, 30.5, 66.0]
+  date_range:
+    start: "2024-01-01"
+    end: "2024-03-31"
+  mpa:
+    wdpa_ids: []
+    edge_buffer_km: 10
+  h3:
+    resolution: 6
+  gfw:
+    datasets:
+      - "public-global-fishing-effort:v20231026"
+    event_types:
+      - "fishing"
+      - "encounter"
+      - "loitering"
+      - "port_visit"
+      - "gap"
+
+bay_of_biscay:
+  name: "Bay of Biscay (Spain / France Atlantic coast)"
+  description: >
+    Atlantic waters off Spain's and France's northern coasts, a major
+    European fishing ground for the Spanish and French fleets.
+  bbox: [-10.0, 43.0, 0.0, 49.0]
+  date_range:
+    start: "2024-01-01"
+    end: "2024-03-31"
+  mpa:
+    wdpa_ids: []
+    edge_buffer_km: 10
+  h3:
+    resolution: 6
+  gfw:
+    datasets:
+      - "public-global-fishing-effort:v20231026"
+    event_types:
+      - "fishing"
+      - "encounter"
+      - "loitering"
+      - "port_visit"
+      - "gap"
+
+barents_sea:
+  name: "Barents Sea (Russia / Norway)"
+  description: >
+    Arctic waters shared by Russia and Norway, one of the world's most
+    productive fishing grounds (cod, haddock).
+  bbox: [15.0, 68.0, 60.0, 78.0]
+  date_range:
+    start: "2024-01-01"
+    end: "2024-03-31"
+  mpa:
+    wdpa_ids: []
+    edge_buffer_km: 10
+  h3:
+    resolution: 6
+  gfw:
+    datasets:
+      - "public-global-fishing-effort:v20231026"
+    event_types:
+      - "fishing"
+      - "encounter"
+      - "loitering"
+      - "port_visit"
+      - "gap"
+
+black_sea_north:
+  name: "Black Sea and Sea of Azov: Ukraine and Russia coasts"
+  description: >
+    Northern Black Sea and Sea of Azov waters off Ukraine and Russia,
+    complementing turkey_seas' southern Black Sea coverage.
+  bbox: [27.0, 44.0, 42.0, 47.5]
   date_range:
     start: "2024-01-01"
     end: "2024-03-31"
