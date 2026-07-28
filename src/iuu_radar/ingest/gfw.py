@@ -60,8 +60,13 @@ def _region_bbox_geojson(bbox: list[float]) -> dict:
 
 
 def _get_client(settings: Settings) -> gfw.Client:
-    """Build a GFW API client from the configured access token."""
-    return gfw.Client(access_token=settings.gfw_api_token)
+    """Build a GFW API client from the configured access token.
+
+    The default 60s HTTP timeout is too short for a global-scale 4Wings
+    report (the server-side aggregation itself can take several minutes);
+    600s gives that room without hanging forever on a genuinely dead request.
+    """
+    return gfw.Client(access_token=settings.gfw_api_token, timeout=600.0)
 
 
 def _month_starts(start: str, end: str) -> list[tuple[str, str]]:
