@@ -24,6 +24,7 @@ from iuu_radar.ingest import wdpa as wdpa_ingest
 from iuu_radar.models.anomaly import fit_score, merge_scores
 from iuu_radar.models.rules import apply_rules
 from iuu_radar.spatial.events_mpa_join import build_mart_events_mpa
+from iuu_radar.spatial.mpa_buffer import build_int_mpa_buffered
 
 DBT_PROJECT_DIR = REPO_ROOT / "dbt" / "iuu_radar"
 
@@ -43,13 +44,15 @@ def transform_region(region_name: str) -> None:
     """Run dbt staging models, build the events/MPA spatial join in bounded
     Python batches, then run dbt's downstream vessel aggregation model.
 
-    mart_events_mpa is deliberately not a single dbt SQL model: joining every
-    event in a busy region (e.g. North Sea) against every nearby MPA in one
-    shot has been observed to OOM-kill dbt even with DuckDB's memory_limit
-    set, since the spatial extension's R-tree/GEOS-backed intersection tests
-    allocate memory outside DuckDB's tracked buffer pool. Processing events in
-    fixed-size batches (spatial/events_mpa_join.py) bounds peak memory to one
-    batch regardless of how many events the region has in total.
+    Neither int_mpa_buffered nor mart_events_mpa are dbt SQL models anymore:
+    a single dbt query buffering/joining a busy region's full MPA or event set
+    (e.g. North Sea) has repeatedly OOM-killed dbt even with DuckDB's
+    memory_limit set, since the spatial extension's R-tree/GEOS-backed
+    geometry operations allocate memory outside DuckDB's tracked buffer pool.
+    Processing MPAs and events in fixed-size batches (spatial/mpa_buffer.py,
+    spatial/events_mpa_join.py) bounds peak memory to one batch regardless of
+    how large the region is, and only replaces that region's own rows instead
+    of recomputing every previously-processed region on every run.
     """
     subprocess.run(
         [
@@ -59,7 +62,6 @@ def transform_region(region_name: str) -> None:
             "stg_gfw_events",
             "stg_mpa",
             "stg_fishing_effort",
-            "int_mpa_buffered",
             "--profiles-dir",
             str(DBT_PROJECT_DIR),
         ],
@@ -69,6 +71,7 @@ def transform_region(region_name: str) -> None:
 
     conn = duckdb_raw.connect_bounded(str(duckdb_raw.DUCKDB_PATH))
     try:
+        build_int_mpa_buffered(conn, region_name)
         build_mart_events_mpa(conn, region_name)
     finally:
         conn.close()

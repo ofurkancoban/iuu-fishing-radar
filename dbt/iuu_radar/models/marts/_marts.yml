@@ -1,19 +1,11 @@
 version: 2
 
 models:
-  - name: int_mpa_buffered
-    description: >
-      MPA geometry pre-buffered by the edge distance and R-tree indexed, so
-      mart_events_mpa's spatial join can probe an index instead of cross
-      joining every event against every MPA.
-    columns:
-      - name: mpa_id
-        tests: [not_null]
-
-  # mart_events_mpa is populated by spatial/events_mpa_join.py in bounded
-  # batches, not by a dbt SQL model (see that module's docstring for why),
-  # so it has no dbt schema tests here; its correctness is covered by
-  # tests/test_events_mpa_join.py instead.
+  # int_mpa_buffered and mart_events_mpa are populated by Python in bounded,
+  # per-region batches (spatial/mpa_buffer.py, spatial/events_mpa_join.py),
+  # not by dbt SQL models (see those modules' docstrings for why), so they
+  # have no dbt schema tests here; their correctness is covered by
+  # tests/test_events_mpa_join.py and tests/test_mpa_buffer.py instead.
 
   - name: mart_vessel_effort
     description: Base per-vessel aggregation of fishing effort and events by proximity zone.
