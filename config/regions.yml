@@ -28,6 +28,32 @@ default:
       - "port_visit"
       - "gap"
 
+global:
+  name: "Global (all oceans)"
+  description: >
+    Worldwide coverage, all oceans. Large by design: used to demonstrate the
+    pipeline at global scale. Data volume and runtime are both significant
+    at this bbox; the spatial join relies on int_mpa_buffered's R-tree index
+    to stay tractable against the full worldwide MPA set.
+  bbox: [-180.0, -85.0, 180.0, 85.0]
+  date_range:
+    start: "2024-01-01"
+    end: "2024-03-31"
+  mpa:
+    wdpa_ids: []
+    edge_buffer_km: 10
+  h3:
+    resolution: 5
+  gfw:
+    datasets:
+      - "public-global-fishing-effort:v20231026"
+    event_types:
+      - "fishing"
+      - "encounter"
+      - "loitering"
+      - "port_visit"
+      - "gap"
+
 turkey_seas:
   name: "Turkey: Black Sea, Marmara, and Aegean coasts"
   description: >
