@@ -4,13 +4,52 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>IUU Fishing Radar</title>
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.css" />
     <link rel="stylesheet" href="style.css" />
     <script src="config.js"></script>
   </head>
   <body>
+    <header id="topbar">
+      <div class="brand">
+        <span class="brand-dot"></span>
+        <span class="brand-name">IUU Fishing Radar</span>
+      </div>
+      <div id="connection-status" class="status status--connecting">connecting…</div>
+    </header>
+
     <main id="app">
-      <p>IUU Fishing Radar frontend scaffold. Map implementation lands in Phase 7.</p>
+      <div id="map"></div>
+
+      <aside id="panel">
+        <section id="ranked-mpas" class="panel-section">
+          <h2>Ranked MPAs</h2>
+          <ol id="mpa-list" class="scroll-list"></ol>
+        </section>
+
+        <section id="live-feed" class="panel-section">
+          <h2>Latest anomalies <span class="live-dot" aria-hidden="true"></span></h2>
+          <ol id="anomaly-list" class="scroll-list"></ol>
+        </section>
+      </aside>
+
+      <div id="detail-drawer" class="hidden">
+        <button id="detail-close" aria-label="Close">&times;</button>
+        <div id="detail-content"></div>
+      </div>
     </main>
+
+    <footer id="disclaimer">
+      <p>
+        Scores and flags are a prioritization aid for human review, not proof of
+        illegal activity. All vessels shown are described as "apparent" or
+        "potential" matches worth investigating, never as confirmed offenders.
+        Fishing activity data: Global Fishing Watch. Marine Protected Area
+        boundaries: World Database on Protected Areas (UNEP-WCMC and IUCN).
+      </p>
+    </footer>
+
+    <script src="https://unpkg.com/maplibre-gl@4/dist/maplibre-gl.js"></script>
+    <script src="https://unpkg.com/pmtiles@3/dist/pmtiles.js"></script>
     <script src="app.js"></script>
   </body>
 </html>
