@@ -68,11 +68,12 @@ def build_int_mpa_buffered(
         raise ValueError("region must not contain a single quote")
 
     conn.execute(_CREATE_TABLE_SQL)
+    # DuckDB's spatial RTREE index crashes internally on DELETE while the
+    # index exists (an INTERNAL Error, not an OOM), so the index is dropped
+    # before deleting this region's old rows and rebuilt afterwards instead
+    # of being created once and left in place across reruns.
+    conn.execute("DROP INDEX IF EXISTS idx_mpa_buffered_geom")
     conn.execute("DELETE FROM int_mpa_buffered WHERE region = ?", [region])
-    conn.execute(
-        "CREATE INDEX IF NOT EXISTS idx_mpa_buffered_geom "
-        "ON int_mpa_buffered USING RTREE (geom_buffered)"
-    )
 
     total = conn.execute(
         "SELECT count(*) FROM stg_mpa WHERE region = ?", [region]
@@ -90,3 +91,8 @@ def build_int_mpa_buffered(
             )
         )
         offset += batch_size
+
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_mpa_buffered_geom "
+        "ON int_mpa_buffered USING RTREE (geom_buffered)"
+    )
