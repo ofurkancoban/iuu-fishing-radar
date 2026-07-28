@@ -1,0 +1,122 @@
+{
+  "title": "IUU Radar: Operational",
+  "uid": "iuu-radar-operational",
+  "tags": ["iuu-radar"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "API request rate by status",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "sum by (status) (rate(http_requests_total[5m]))",
+          "legendFormat": "{{status}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "API latency (p95)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(http_request_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Rate limit rejections (429s)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum(rate(http_requests_total{status=\"429\"}[5m]))",
+          "legendFormat": "429/s"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Latest pipeline run: failed?",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 8 },
+      "targets": [{ "expr": "iuu_radar_pipeline_last_run_failed" }],
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "OK", "color": "green" } } },
+            { "type": "value", "options": { "1": { "text": "FAILED", "color": "red" } } }
+          ]
+        }
+      }
+    },
+    {
+      "type": "timeseries",
+      "title": "Pipeline run duration",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 8 },
+      "targets": [
+        {
+          "expr": "iuu_radar_pipeline_last_run_duration_seconds",
+          "legendFormat": "{{region}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Host CPU usage",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "expr": "1 - avg(rate(node_cpu_seconds_total{mode=\"idle\"}[5m]))",
+          "legendFormat": "CPU busy"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Host memory available",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "targets": [
+        { "expr": "node_memory_MemAvailable_bytes", "legendFormat": "available" }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Host disk free (root fs)",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "targets": [
+        {
+          "expr": "node_filesystem_avail_bytes{mountpoint=\"/\"}",
+          "legendFormat": "free"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Container CPU usage (this stack)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "targets": [
+        {
+          "expr": "sum by (name) (rate(container_cpu_usage_seconds_total{name=~\"iuu-radar.*\"}[5m]))",
+          "legendFormat": "{{name}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Container memory usage (this stack)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "targets": [
+        {
+          "expr": "container_memory_usage_bytes{name=~\"iuu-radar.*\"}",
+          "legendFormat": "{{name}}"
+        }
+      ]
+    }
+  ]
+}

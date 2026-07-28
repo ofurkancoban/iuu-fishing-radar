@@ -65,3 +65,34 @@ def write_anomalies(conn: duckdb.DuckDBPyConnection, anomalies: pd.DataFrame) ->
 
     conn.execute("INSERT INTO result_anomalies SELECT * FROM out")
     return out
+
+
+def write_pipeline_run(
+    conn: duckdb.DuckDBPyConnection,
+    region: str,
+    rows_processed: int,
+    anomalies_count: int,
+    duration_seconds: float,
+    failed: bool,
+) -> None:
+    """Append one row summarizing a pipeline run, read by metrics.refresh_pipeline_gauges.
+
+    pipeline_runs is append-only history; the API only ever reads the latest
+    row per region when refreshing Prometheus gauges on /metrics scrape.
+    """
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pipeline_runs (
+            region VARCHAR,
+            rows_processed BIGINT,
+            anomalies_count BIGINT,
+            duration_seconds DOUBLE,
+            failed BOOLEAN,
+            ts TIMESTAMP
+        )
+        """
+    )
+    conn.execute(
+        "INSERT INTO pipeline_runs VALUES (?, ?, ?, ?, ?, now())",
+        [region, rows_processed, anomalies_count, duration_seconds, failed],
+    )

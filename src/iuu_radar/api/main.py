@@ -4,17 +4,20 @@ from __future__ import annotations
 
 import logging
 
+import duckdb
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from prometheus_fastapi_instrumentator import Instrumentator, metrics
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.middleware import SlowAPIMiddleware
 from slowapi.util import get_remote_address
 
-from iuu_radar.api.deps import get_settings
+from iuu_radar.api.deps import DUCKDB_PATH, get_settings
 from iuu_radar.api.routers import anomalies, hotspots, mpas, vessels
 from iuu_radar.api.stream import router as stream_router
+from iuu_radar.metrics import refresh_pipeline_gauges
 
 logger = logging.getLogger("iuu_radar.api")
 
@@ -62,3 +65,22 @@ app.include_router(hotspots.router)
 app.include_router(vessels.router)
 app.include_router(anomalies.router)
 app.include_router(stream_router)
+
+
+def _refresh_pipeline_gauges(info) -> None:
+    """Refresh the pipeline_runs-derived gauges only when /metrics itself is scraped."""
+    if info.request.url.path != "/metrics" or not DUCKDB_PATH.exists():
+        return
+    conn = duckdb.connect(str(DUCKDB_PATH), read_only=True)
+    try:
+        refresh_pipeline_gauges(conn)
+    finally:
+        conn.close()
+
+
+# /metrics is never proxied by Caddy (see caddy/Caddyfile's catch-all 404), so
+# it is reachable only from inside the Docker network, never publicly.
+instrumentator = Instrumentator()
+instrumentator.add(metrics.default())
+instrumentator.add(_refresh_pipeline_gauges)
+instrumentator.instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)

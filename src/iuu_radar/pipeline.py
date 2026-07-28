@@ -8,6 +8,7 @@ external, rate-limited APIs.
 from __future__ import annotations
 
 import subprocess
+import time
 
 import duckdb
 from prefect import flow, task
@@ -122,17 +123,57 @@ async def notify_new_anomalies(region_name: str, settings: Settings) -> None:
 
 @flow(name="iuu-radar-pipeline")
 async def run_pipeline(region_name: str | None = None) -> None:
-    """Run the full pipeline for one region, or every configured region if none is given."""
+    """Run the full pipeline for one region, or every configured region if none is given.
+
+    Records one pipeline_runs row per region (rows processed, anomalies
+    written, duration, success/failure) for the /metrics gauges in
+    metrics.refresh_pipeline_gauges.
+    """
     settings = Settings()
     regions = load_regions()
     names = [region_name] if region_name else list(regions.keys())
+
     for name in names:
         region_cfg = regions[name]
-        await ingest_region(name, region_cfg, settings)
-        transform_region(name)
-        score_region(name)
-        export_tiles(name)
-        await notify_new_anomalies(name, settings)
+        started = time.monotonic()
+        failed = False
+        rows_processed = 0
+        anomalies_count = 0
+
+        try:
+            await ingest_region(name, region_cfg, settings)
+            transform_region(name)
+            score_region(name)
+
+            conn = duckdb.connect(str(duckdb_raw.DUCKDB_PATH), read_only=True)
+            try:
+                rows_processed = conn.execute(
+                    "SELECT count(*) FROM result_vessels WHERE region = ?", [name]
+                ).fetchone()[0]
+                anomalies_count = conn.execute(
+                    "SELECT count(*) FROM result_anomalies WHERE region = ?", [name]
+                ).fetchone()[0]
+            finally:
+                conn.close()
+
+            export_tiles(name)
+            await notify_new_anomalies(name, settings)
+        except Exception:
+            failed = True
+            raise
+        finally:
+            conn = duckdb.connect(str(duckdb_raw.DUCKDB_PATH))
+            try:
+                export_results.write_pipeline_run(
+                    conn,
+                    region=name,
+                    rows_processed=rows_processed,
+                    anomalies_count=anomalies_count,
+                    duration_seconds=time.monotonic() - started,
+                    failed=failed,
+                )
+            finally:
+                conn.close()
 
 
 if __name__ == "__main__":

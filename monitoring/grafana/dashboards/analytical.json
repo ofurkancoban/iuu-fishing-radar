@@ -1,0 +1,54 @@
+{
+  "title": "IUU Radar: Analytical",
+  "uid": "iuu-radar-analytical",
+  "tags": ["iuu-radar"],
+  "timezone": "utc",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-7d", "to": "now" },
+  "description": "Per-run pipeline analytics. Live-ranked MPAs and vessels are shown on the web frontend, not duplicated here.",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Anomalies detected per pipeline run, by region",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "iuu_radar_pipeline_last_run_anomalies",
+          "legendFormat": "{{region}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Rows processed per pipeline run, by region",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "iuu_radar_pipeline_last_run_rows_processed",
+          "legendFormat": "{{region}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Pipeline run duration trend",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 9 },
+      "targets": [
+        {
+          "expr": "iuu_radar_pipeline_last_run_duration_seconds",
+          "legendFormat": "{{region}}"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Anomalies detected (latest run, all regions)",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 9 },
+      "targets": [
+        { "expr": "sum(iuu_radar_pipeline_last_run_anomalies)" }
+      ]
+    }
+  ]
+}
