@@ -1,6 +1,15 @@
 version: 2
 
 models:
+  - name: int_mpa_buffered
+    description: >
+      MPA geometry pre-buffered by the edge distance and R-tree indexed, so
+      mart_events_mpa's spatial join can probe an index instead of cross
+      joining every event against every MPA.
+    columns:
+      - name: mpa_id
+        tests: [not_null]
+
   - name: mart_events_mpa
     description: Every GFW event tagged with its proximity zone relative to the nearest MPA.
     columns:
