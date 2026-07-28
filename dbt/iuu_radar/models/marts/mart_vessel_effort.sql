@@ -1,6 +1,10 @@
 -- Base per-vessel aggregation: fishing effort hours and event counts split by
 -- proximity zone. This is the table features/build.py extends into the full
 -- feature matrix (gap events, encounters, identity anomalies, etc.) in Phase 3.
+--
+-- mart_events_mpa is populated by Python (spatial/events_mpa_join.py) in
+-- bounded batches before this model runs, not by a dbt SQL model, so it is
+-- referenced here as a plain table rather than through dbt's ref macro.
 
 with effort as (
     select
@@ -18,7 +22,7 @@ events_by_zone as (
         proximity_zone,
         event_type,
         count(*) as event_count
-    from {{ ref('mart_events_mpa') }}
+    from mart_events_mpa
     where vessel_id is not null
     group by 1, 2, 3, 4
 ),

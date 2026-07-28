@@ -38,6 +38,8 @@ def connect_bounded(path: str, read_only: bool = False) -> duckdb.DuckDBPyConnec
     of growing unbounded and risking an OOM kill on a shared host."""
     conn = duckdb.connect(path, read_only=read_only)
     conn.execute(f"SET memory_limit = '{DUCKDB_MEMORY_LIMIT}'")
+    conn.execute("INSTALL spatial")
+    conn.execute("LOAD spatial")
     return conn
 
 

@@ -23,6 +23,7 @@ from iuu_radar.ingest import gfw as gfw_ingest
 from iuu_radar.ingest import wdpa as wdpa_ingest
 from iuu_radar.models.anomaly import fit_score, merge_scores
 from iuu_radar.models.rules import apply_rules
+from iuu_radar.spatial.events_mpa_join import build_mart_events_mpa
 
 DBT_PROJECT_DIR = REPO_ROOT / "dbt" / "iuu_radar"
 
@@ -39,9 +40,48 @@ async def ingest_region(region_name: str, region_cfg: dict, settings: Settings) 
 
 @task
 def transform_region(region_name: str) -> None:
-    """Run dbt staging and mart models for the whole DuckDB file (dbt has no region filter)."""
+    """Run dbt staging models, build the events/MPA spatial join in bounded
+    Python batches, then run dbt's downstream vessel aggregation model.
+
+    mart_events_mpa is deliberately not a single dbt SQL model: joining every
+    event in a busy region (e.g. North Sea) against every nearby MPA in one
+    shot has been observed to OOM-kill dbt even with DuckDB's memory_limit
+    set, since the spatial extension's R-tree/GEOS-backed intersection tests
+    allocate memory outside DuckDB's tracked buffer pool. Processing events in
+    fixed-size batches (spatial/events_mpa_join.py) bounds peak memory to one
+    batch regardless of how many events the region has in total.
+    """
     subprocess.run(
-        ["dbt", "run", "--profiles-dir", str(DBT_PROJECT_DIR)],
+        [
+            "dbt",
+            "run",
+            "--select",
+            "stg_gfw_events",
+            "stg_mpa",
+            "stg_fishing_effort",
+            "int_mpa_buffered",
+            "--profiles-dir",
+            str(DBT_PROJECT_DIR),
+        ],
+        cwd=DBT_PROJECT_DIR,
+        check=True,
+    )
+
+    conn = duckdb_raw.connect_bounded(str(duckdb_raw.DUCKDB_PATH))
+    try:
+        build_mart_events_mpa(conn, region_name)
+    finally:
+        conn.close()
+
+    subprocess.run(
+        [
+            "dbt",
+            "run",
+            "--select",
+            "mart_vessel_effort",
+            "--profiles-dir",
+            str(DBT_PROJECT_DIR),
+        ],
         cwd=DBT_PROJECT_DIR,
         check=True,
     )

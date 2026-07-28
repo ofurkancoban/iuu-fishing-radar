@@ -10,17 +10,10 @@ models:
       - name: mpa_id
         tests: [not_null]
 
-  - name: mart_events_mpa
-    description: Every GFW event tagged with its proximity zone relative to the nearest MPA.
-    columns:
-      - name: event_id
-        tests: [not_null, unique]
-      - name: proximity_zone
-        tests:
-          - not_null
-          - accepted_values:
-              arguments:
-                values: ["inside", "edge", "outside"]
+  # mart_events_mpa is populated by spatial/events_mpa_join.py in bounded
+  # batches, not by a dbt SQL model (see that module's docstring for why),
+  # so it has no dbt schema tests here; its correctness is covered by
+  # tests/test_events_mpa_join.py instead.
 
   - name: mart_vessel_effort
     description: Base per-vessel aggregation of fishing effort and events by proximity zone.
