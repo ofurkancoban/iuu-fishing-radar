@@ -20,6 +20,7 @@ __pycache__/
 dbt/iuu_radar/target/
 dbt/iuu_radar/logs/
 dbt/iuu_radar/dbt_packages/
+dbt/iuu_radar/.user.yml
 
 # Editors / OS
 .DS_Store

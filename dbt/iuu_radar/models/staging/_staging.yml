@@ -1,0 +1,34 @@
+version: 2
+
+sources:
+  - name: raw
+    schema: raw
+    tables:
+      - name: raw_events
+      - name: raw_fishing_effort
+      - name: raw_mpas
+
+models:
+  - name: stg_gfw_events
+    description: One typed row per GFW event (fishing, encounter, loitering, port_visit, gap).
+    columns:
+      - name: event_id
+        tests: [not_null, unique]
+      - name: event_type
+        tests: [not_null]
+      - name: lat
+        tests: [not_null]
+      - name: lon
+        tests: [not_null]
+
+  - name: stg_fishing_effort
+    description: One row per vessel per 4Wings report bucket.
+    columns:
+      - name: vessel_id
+        tests: [not_null]
+
+  - name: stg_mpa
+    description: One row per WDPA polygon relevant to the configured region(s).
+    columns:
+      - name: mpa_id
+        tests: [not_null, unique]

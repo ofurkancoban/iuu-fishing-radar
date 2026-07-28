@@ -1,0 +1,20 @@
+version: 2
+
+models:
+  - name: mart_events_mpa
+    description: Every GFW event tagged with its proximity zone relative to the nearest MPA.
+    columns:
+      - name: event_id
+        tests: [not_null, unique]
+      - name: proximity_zone
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: ["inside", "edge", "outside"]
+
+  - name: mart_vessel_effort
+    description: Base per-vessel aggregation of fishing effort and events by proximity zone.
+    columns:
+      - name: vessel_id
+        tests: [not_null]
