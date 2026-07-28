@@ -8,6 +8,7 @@ call entirely, so pipeline runs are deterministic and do not re-hit rate limits.
 from __future__ import annotations
 
 import json
+from datetime import date
 from pathlib import Path
 
 import gfwapiclient as gfw
@@ -15,6 +16,14 @@ import gfwapiclient as gfw
 from iuu_radar.config import REPO_ROOT, Settings
 
 RAW_DIR = REPO_ROOT / "data" / "raw" / "gfw"
+
+# gfwapiclient defaults to a 99999-row limit per Events API call, which builds
+# the entire response as parsed pydantic objects in memory before returning.
+# At global scale that can be hundreds of thousands of rows per event type and
+# has been observed to OOM-kill the pipeline process on the VPS. Paginating in
+# smaller pages and writing each page to disk immediately bounds peak memory
+# to one page's worth of parsed rows regardless of total result size.
+EVENTS_PAGE_SIZE = 5000
 
 # GFW dataset id for the primary Events API pull, one per event type in region config.
 EVENT_DATASET_BY_TYPE = {
@@ -55,43 +64,102 @@ def _get_client(settings: Settings) -> gfw.Client:
     return gfw.Client(access_token=settings.gfw_api_token)
 
 
+def _month_starts(start: str, end: str) -> list[tuple[str, str]]:
+    """Split a date range into (month_start, month_end) pairs, inclusive of both ends."""
+    start_date = date.fromisoformat(start)
+    end_date = date.fromisoformat(end)
+
+    ranges = []
+    cursor = start_date.replace(day=1)
+    while cursor <= end_date:
+        next_month = date(cursor.year + (cursor.month // 12), (cursor.month % 12) + 1, 1)
+        range_start = max(cursor, start_date)
+        range_end = min(next_month.fromordinal(next_month.toordinal() - 1), end_date)
+        ranges.append((range_start.isoformat(), range_end.isoformat()))
+        cursor = next_month
+    return ranges
+
+
 async def fetch_fishing_effort(region: str, region_cfg: dict, settings: Settings) -> Path:
     """Fetch 4Wings apparent fishing effort for a region and cache the raw response.
 
     Skips the network call if a cache file already exists for this region.
+    Requests one month at a time (the 4Wings report endpoint has no
+    pagination) so a multi-month range at global scale doesn't build one huge
+    response in memory the way a single all-months call would.
     """
     cache_path = _cache_path(region, "fishing_effort")
     if cache_path.exists():
         return cache_path
 
     client = _get_client(settings)
-    result = await client.fourwings.create_fishing_effort_report(
-        spatial_resolution="LOW",
-        temporal_resolution="MONTHLY",
-        group_by="VESSEL_ID",
-        start_date=region_cfg["date_range"]["start"],
-        end_date=region_cfg["date_range"]["end"],
-        geojson=_region_bbox_geojson(region_cfg["bbox"]),
-    )
-    cache_path.write_text(json.dumps([row.model_dump(mode="json") for row in result.data()]))
+    date_range = region_cfg["date_range"]
+    months = _month_starts(date_range["start"], date_range["end"])
+
+    tmp_path = cache_path.with_suffix(".json.tmp")
+    with open(tmp_path, "w") as f:
+        f.write("[")
+        first_row = True
+        for month_start, month_end in months:
+            result = await client.fourwings.create_fishing_effort_report(
+                spatial_resolution="LOW",
+                temporal_resolution="MONTHLY",
+                group_by="VESSEL_ID",
+                start_date=month_start,
+                end_date=month_end,
+                geojson=_region_bbox_geojson(region_cfg["bbox"]),
+            )
+            for row in result.data():
+                if not first_row:
+                    f.write(",")
+                f.write(json.dumps(row.model_dump(mode="json")))
+                first_row = False
+        f.write("]")
+
+    tmp_path.rename(cache_path)
     return cache_path
 
 
 async def fetch_events(region: str, region_cfg: dict, settings: Settings, event_type: str) -> Path:
-    """Fetch Events API results (fishing, encounter, loitering, port_visit, gap) for a region."""
+    """Fetch Events API results (fishing, encounter, loitering, port_visit, gap) for a region.
+
+    Paginates in EVENTS_PAGE_SIZE-row pages, writing each page to disk as it
+    arrives rather than accumulating the full result set in memory (see
+    EVENTS_PAGE_SIZE for why this matters at global scale).
+    """
     cache_path = _cache_path(region, f"events_{event_type}")
     if cache_path.exists():
         return cache_path
 
     dataset = EVENT_DATASET_BY_TYPE[event_type]
     client = _get_client(settings)
-    result = await client.events.get_all_events(
-        datasets=[dataset],
-        start_date=region_cfg["date_range"]["start"],
-        end_date=region_cfg["date_range"]["end"],
-        geometry=_region_bbox_geojson(region_cfg["bbox"]),
-    )
-    cache_path.write_text(json.dumps([row.model_dump(mode="json") for row in result.data()]))
+
+    tmp_path = cache_path.with_suffix(".json.tmp")
+    offset = 0
+    with open(tmp_path, "w") as f:
+        f.write("[")
+        first_row = True
+        while True:
+            result = await client.events.get_all_events(
+                datasets=[dataset],
+                start_date=region_cfg["date_range"]["start"],
+                end_date=region_cfg["date_range"]["end"],
+                geometry=_region_bbox_geojson(region_cfg["bbox"]),
+                limit=EVENTS_PAGE_SIZE,
+                offset=offset,
+            )
+            page = result.data()
+            for row in page:
+                if not first_row:
+                    f.write(",")
+                f.write(json.dumps(row.model_dump(mode="json")))
+                first_row = False
+            if len(page) < EVENTS_PAGE_SIZE:
+                break
+            offset += EVENTS_PAGE_SIZE
+        f.write("]")
+
+    tmp_path.rename(cache_path)
     return cache_path
 
 

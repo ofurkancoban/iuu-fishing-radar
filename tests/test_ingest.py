@@ -57,6 +57,51 @@ def test_fetch_events_calls_client_and_caches(tmp_path, monkeypatch):
     fake_client.events.get_all_events.assert_awaited_once()
 
 
+def test_fetch_events_paginates_without_holding_full_result_in_memory(tmp_path, monkeypatch):
+    monkeypatch.setattr(gfw_ingest, "RAW_DIR", tmp_path / "gfw")
+    monkeypatch.setattr(gfw_ingest, "EVENTS_PAGE_SIZE", 2)
+
+    def make_row(row_id: str) -> MagicMock:
+        row = MagicMock()
+        row.model_dump.return_value = {"id": row_id}
+        return row
+
+    # Three pages of 2, 2, then 1 row (last page shorter than page size ends pagination).
+    pages = [
+        MagicMock(data=MagicMock(return_value=[make_row("1"), make_row("2")])),
+        MagicMock(data=MagicMock(return_value=[make_row("3"), make_row("4")])),
+        MagicMock(data=MagicMock(return_value=[make_row("5")])),
+    ]
+    fake_client = MagicMock()
+    fake_client.events.get_all_events = AsyncMock(side_effect=pages)
+
+    with patch("gfwapiclient.Client", return_value=fake_client):
+        result = asyncio.run(
+            gfw_ingest.fetch_events("default", REGION_CFG, Settings(gfw_api_token="x"), "gap")
+        )
+
+    assert json.loads(result.read_text()) == [
+        {"id": "1"}, {"id": "2"}, {"id": "3"}, {"id": "4"}, {"id": "5"}
+    ]
+    assert fake_client.events.get_all_events.await_count == 3
+    calls = fake_client.events.get_all_events.await_args_list
+    assert [c.kwargs["offset"] for c in calls] == [0, 2, 4]
+
+
+def test_month_starts_splits_multi_month_range():
+    assert gfw_ingest._month_starts("2024-01-01", "2024-03-31") == [
+        ("2024-01-01", "2024-01-31"),
+        ("2024-02-01", "2024-02-29"),
+        ("2024-03-01", "2024-03-31"),
+    ]
+
+
+def test_month_starts_single_month_partial_range():
+    assert gfw_ingest._month_starts("2024-01-15", "2024-01-20") == [
+        ("2024-01-15", "2024-01-20")
+    ]
+
+
 def test_load_mpa_polygons_missing_source_raises(tmp_path, monkeypatch):
     monkeypatch.setattr(wdpa_ingest, "RAW_DIR", tmp_path / "wdpa")
     monkeypatch.setattr(wdpa_ingest, "SOURCE_DIR", tmp_path / "wdpa" / "source")
