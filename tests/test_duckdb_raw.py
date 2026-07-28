@@ -61,7 +61,7 @@ def test_load_mpas(tmp_path, monkeypatch):
     wdpa_raw = tmp_path / "wdpa"
     wdpa_raw.mkdir(parents=True)
     gdf = gpd.GeoDataFrame(
-        {"WDPAID": [1], "geometry": [Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])]},
+        {"SITE_ID": [1], "geometry": [Polygon([(0, 0), (1, 0), (1, 1), (0, 1)])]},
         crs="EPSG:4326",
     )
     gdf.to_file(wdpa_raw / "default.geojson", driver="GeoJSON")

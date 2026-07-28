@@ -41,7 +41,8 @@ def test_fetch_events_calls_client_and_caches(tmp_path, monkeypatch):
 
     row = MagicMock()
     row.model_dump.return_value = {"id": "abc"}
-    fake_result = MagicMock(data=[row])
+    fake_result = MagicMock()
+    fake_result.data.return_value = [row]
 
     fake_client = MagicMock()
     fake_client.events.get_all_events = AsyncMock(return_value=fake_result)
@@ -74,7 +75,7 @@ def test_load_mpa_polygons_filters_by_bbox(tmp_path, monkeypatch):
     inside = Polygon([(-91, -1), (-90, -1), (-90, 0), (-91, 0)])
     outside = Polygon([(50, 50), (51, 50), (51, 51), (50, 51)])
     gdf = gpd.GeoDataFrame(
-        {"WDPAID": [1, 2], "geometry": [inside, outside]}, crs="EPSG:4326"
+        {"SITE_ID": [1, 2], "geometry": [inside, outside]}, crs="EPSG:4326"
     )
     gdf.to_file(source_dir / "wdpa.shp")
 
@@ -82,4 +83,4 @@ def test_load_mpa_polygons_filters_by_bbox(tmp_path, monkeypatch):
     result = gpd.read_file(out_path)
 
     assert len(result) == 1
-    assert result.iloc[0]["WDPAID"] == 1
+    assert result.iloc[0]["SITE_ID"] == 1

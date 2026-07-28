@@ -11,6 +11,7 @@ import subprocess
 import time
 
 import duckdb
+import pandas as pd
 from prefect import flow, task
 
 from iuu_radar.config import REPO_ROOT, Settings, load_regions
@@ -71,8 +72,43 @@ def score_region(region_name: str) -> None:
             .assign(mpa_id="aggregate")[["mpa_id", "region", "score"]]
         )
         export_results.write_mpa_scores(conn, mpa_scores)
+
+        flagged = vessels_out[vessels_out["flags"].apply(len) > 0]
+        anomalies = _build_anomalies(conn, region_name, flagged)
+        export_results.write_anomalies(conn, anomalies)
     finally:
         conn.close()
+
+
+def _build_anomalies(
+    conn: duckdb.DuckDBPyConnection, region_name: str, flagged_vessels: pd.DataFrame
+) -> pd.DataFrame:
+    """Pick one representative event location per flagged vessel for result_anomalies.
+
+    Uses each vessel's most recent event inside or near an MPA as the anomaly's
+    map location, paired with that vessel's rule-based reason strings.
+    """
+    if flagged_vessels.empty:
+        return pd.DataFrame(columns=["region", "vessel_id", "lon", "lat", "ts", "reasons"])
+
+    vessel_ids = flagged_vessels["vessel_id"].tolist()
+    placeholders = ",".join(["?"] * len(vessel_ids))
+    events = conn.execute(
+        f"""
+        SELECT vessel_id, lon, lat, start_ts AS ts
+        FROM mart_events_mpa
+        WHERE region = ? AND vessel_id IN ({placeholders})
+          AND proximity_zone IN ('inside', 'edge')
+        QUALIFY row_number() OVER (PARTITION BY vessel_id ORDER BY start_ts DESC) = 1
+        """,
+        [region_name, *vessel_ids],
+    ).fetch_df()
+
+    merged = events.merge(
+        flagged_vessels[["vessel_id", "reasons"]], on="vessel_id", how="inner"
+    )
+    merged.insert(0, "region", region_name)
+    return merged[["region", "vessel_id", "lon", "lat", "ts", "reasons"]]
 
 
 @task
@@ -132,6 +168,7 @@ async def run_pipeline(region_name: str | None = None) -> None:
     settings = Settings()
     regions = load_regions()
     names = [region_name] if region_name else list(regions.keys())
+    duckdb_raw.DUCKDB_PATH.parent.mkdir(parents=True, exist_ok=True)
 
     for name in names:
         region_cfg = regions[name]

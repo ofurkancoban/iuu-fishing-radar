@@ -18,8 +18,8 @@ services:
     command: ["python", "-m", "iuu_radar.pipeline"]
     environment: *common-env
     volumes:
-      - data:/app/data
-      - tiles:/app/tiles
+      - ./data:/app/data
+      - ./tiles:/app/tiles
     depends_on:
       - redis
     networks: [internal]
@@ -30,8 +30,8 @@ services:
     image: iuu-radar:latest
     environment: *common-env
     volumes:
-      - data:/app/data:ro
-      - tiles:/app/tiles:ro
+      - ./data:/app/data:ro
+      - ./tiles:/app/tiles:ro
     depends_on:
       - redis
     networks: [internal]
@@ -46,7 +46,7 @@ services:
     image: caddy:2.8.4-alpine
     volumes:
       - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
-      - tiles:/srv/tiles:ro
+      - ./tiles:/srv/tiles:ro
       - caddy_data:/data
       - caddy_config:/config
     environment:
@@ -138,8 +138,6 @@ networks:
     driver: bridge
 
 volumes:
-  data:
-  tiles:
   redis_data:
   prometheus_data:
   grafana_data:

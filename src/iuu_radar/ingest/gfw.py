@@ -73,7 +73,7 @@ async def fetch_fishing_effort(region: str, region_cfg: dict, settings: Settings
         end_date=region_cfg["date_range"]["end"],
         geojson=_region_bbox_geojson(region_cfg["bbox"]),
     )
-    cache_path.write_text(json.dumps([row.model_dump(mode="json") for row in result.data]))
+    cache_path.write_text(json.dumps([row.model_dump(mode="json") for row in result.data()]))
     return cache_path
 
 
@@ -91,7 +91,7 @@ async def fetch_events(region: str, region_cfg: dict, settings: Settings, event_
         end_date=region_cfg["date_range"]["end"],
         geometry=_region_bbox_geojson(region_cfg["bbox"]),
     )
-    cache_path.write_text(json.dumps([row.model_dump(mode="json") for row in result.data]))
+    cache_path.write_text(json.dumps([row.model_dump(mode="json") for row in result.data()]))
     return cache_path
 
 
@@ -106,7 +106,7 @@ async def fetch_vessel_info(vessel_ids: list[str], settings: Settings) -> Path:
     result = await client.vessels.get_vessels_by_ids(
         ids=vessel_ids, datasets=["public-global-vessel-identity:latest"]
     )
-    cache_path.write_text(json.dumps([row.model_dump(mode="json") for row in result.data]))
+    cache_path.write_text(json.dumps([row.model_dump(mode="json") for row in result.data()]))
     return cache_path
 
 
