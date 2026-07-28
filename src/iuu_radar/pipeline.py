@@ -62,8 +62,8 @@ def score_region(region_name: str) -> None:
         vessels_out = with_rules.assign(score=final_scores, last_seen=None)[
             ["vessel_id", "region", "score", "flags", "reasons", "last_seen"]
         ]
-        export_results.write_vessels(conn, vessels_out)
-        export_results.write_hotspots(conn, cell_features)
+        export_results.write_vessels(conn, region_name, vessels_out)
+        export_results.write_hotspots(conn, region_name, cell_features)
 
         mpa_scores = (
             vessels_out.groupby("region")["score"]
@@ -71,7 +71,7 @@ def score_region(region_name: str) -> None:
             .reset_index()
             .assign(mpa_id="aggregate")[["mpa_id", "region", "score"]]
         )
-        export_results.write_mpa_scores(conn, mpa_scores)
+        export_results.write_mpa_scores(conn, region_name, mpa_scores)
 
         flagged = vessels_out[vessels_out["flags"].apply(len) > 0]
         anomalies = _build_anomalies(conn, region_name, flagged)

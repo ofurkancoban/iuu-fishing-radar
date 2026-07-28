@@ -13,17 +13,33 @@ import duckdb
 import pandas as pd
 
 
-def write_mpa_scores(conn: duckdb.DuckDBPyConnection, mpa_scores: pd.DataFrame) -> None:
+def _replace_region(
+    conn: duckdb.DuckDBPyConnection, table: str, region: str, df: pd.DataFrame
+) -> None:
+    """Create `table` if missing, then replace only `region`'s rows with `df`.
+
+    The pipeline runs one region at a time, so a plain CREATE OR REPLACE would
+    wipe out every other region's rows on the next region's run. This keeps
+    other regions' results intact.
+    """
+    conn.execute(f"CREATE TABLE IF NOT EXISTS {table} AS SELECT * FROM df LIMIT 0")
+    conn.execute(f"DELETE FROM {table} WHERE region = ?", [region])
+    conn.execute(f"INSERT INTO {table} SELECT * FROM df")
+
+
+def write_mpa_scores(
+    conn: duckdb.DuckDBPyConnection, region: str, mpa_scores: pd.DataFrame
+) -> None:
     """Write result_mpa_scores: mpa_id, region, score, rank, geometry_simplified."""
-    conn.execute("CREATE OR REPLACE TABLE result_mpa_scores AS SELECT * FROM mpa_scores")
+    _replace_region(conn, "result_mpa_scores", region, mpa_scores)
 
 
-def write_hotspots(conn: duckdb.DuckDBPyConnection, hotspots: pd.DataFrame) -> None:
+def write_hotspots(conn: duckdb.DuckDBPyConnection, region: str, hotspots: pd.DataFrame) -> None:
     """Write result_hotspots: h3_cell, region, intensity."""
-    conn.execute("CREATE OR REPLACE TABLE result_hotspots AS SELECT * FROM hotspots")
+    _replace_region(conn, "result_hotspots", region, hotspots)
 
 
-def write_vessels(conn: duckdb.DuckDBPyConnection, vessels: pd.DataFrame) -> None:
+def write_vessels(conn: duckdb.DuckDBPyConnection, region: str, vessels: pd.DataFrame) -> None:
     """Write result_vessels: vessel_id, region, score, flags, reasons, last_seen.
 
     flags and reasons are stored as JSON strings since they are variable-length
@@ -32,7 +48,7 @@ def write_vessels(conn: duckdb.DuckDBPyConnection, vessels: pd.DataFrame) -> Non
     out = vessels.copy()
     out["flags"] = out["flags"].apply(json.dumps)
     out["reasons"] = out["reasons"].apply(json.dumps)
-    conn.execute("CREATE OR REPLACE TABLE result_vessels AS SELECT * FROM out")
+    _replace_region(conn, "result_vessels", region, out)
 
 
 def write_anomalies(conn: duckdb.DuckDBPyConnection, anomalies: pd.DataFrame) -> pd.DataFrame:

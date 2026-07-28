@@ -27,3 +27,28 @@ default:
       - "loitering"
       - "port_visit"
       - "gap"
+
+turkey_seas:
+  name: "Turkey: Black Sea, Marmara, and Aegean coasts"
+  description: >
+    Turkish coastal waters across the Black Sea, Sea of Marmara, and Aegean
+    Sea, covering MPAs such as the Datca-Bozburun and Gokova Special
+    Environmental Protection Areas.
+  bbox: [23.0, 35.5, 42.0, 43.0]
+  date_range:
+    start: "2024-01-01"
+    end: "2024-03-31"
+  mpa:
+    wdpa_ids: []
+    edge_buffer_km: 10
+  h3:
+    resolution: 6
+  gfw:
+    datasets:
+      - "public-global-fishing-effort:v20231026"
+    event_types:
+      - "fishing"
+      - "encounter"
+      - "loitering"
+      - "port_visit"
+      - "gap"
